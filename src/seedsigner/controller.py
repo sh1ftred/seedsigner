@@ -123,6 +123,7 @@ class Controller(Singleton):
     address_explorer_data: dict = None
 
     sign_message_data: dict = None
+    nostr_bunker_private_key_hex: str = None
     # TODO: end refactor section
 
     # Destination placeholder for when we need to jump out to a side flow but intend to

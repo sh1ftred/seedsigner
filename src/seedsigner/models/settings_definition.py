@@ -355,6 +355,10 @@ class SettingsConstants:
     SETTING__MICROSD_TOAST_TIMER = "microsd_toast_timer"
 
     SETTING__DEBUG = "debug"
+    SETTING__NOSTR_BUNKER = "nostr_bunker"
+    SETTING__NOSTR_RELAY_URL = "nostr_relay_url"
+    SETTING__NOSTR_BUNKER_PUBKEY = "nostr_bunker_pubkey"
+    SETTING__NOSTR_BUNKER_SECRET = "nostr_bunker_secret"
 
 
     # Hardware config settings
@@ -715,6 +719,37 @@ class SettingsDefinition:
                       display_name=_mft("Show partner logos"),
                       visibility=SettingsConstants.VISIBILITY__ADVANCED,
                       default_value=SettingsConstants.OPTION__ENABLED),
+
+        SettingsEntry(category=SettingsConstants.CATEGORY__FEATURES,
+                      attr_name=SettingsConstants.SETTING__NOSTR_BUNKER,
+                      abbreviated_name="nostr_bunker",
+                      display_name=_mft("Nostr bunker mode"),
+                      visibility=SettingsConstants.VISIBILITY__ADVANCED,
+                      default_value=SettingsConstants.OPTION__DISABLED),
+
+        SettingsEntry(category=SettingsConstants.CATEGORY__FEATURES,
+                      attr_name=SettingsConstants.SETTING__NOSTR_RELAY_URL,
+                      abbreviated_name="nostr_relay",
+                      display_name=_mft("Nostr relay URL"),
+                      type=SettingsConstants.TYPE__FREE_ENTRY,
+                      visibility=SettingsConstants.VISIBILITY__HIDDEN,
+                      default_value="wss://relay.damus.io"),
+
+        SettingsEntry(category=SettingsConstants.CATEGORY__FEATURES,
+                      attr_name=SettingsConstants.SETTING__NOSTR_BUNKER_PUBKEY,
+                      abbreviated_name="nostr_bunker_pubkey",
+                      display_name=_mft("Nostr bunker pubkey"),
+                      type=SettingsConstants.TYPE__FREE_ENTRY,
+                      visibility=SettingsConstants.VISIBILITY__HIDDEN,
+                      default_value=""),
+
+        SettingsEntry(category=SettingsConstants.CATEGORY__FEATURES,
+                      attr_name=SettingsConstants.SETTING__NOSTR_BUNKER_SECRET,
+                      abbreviated_name="nostr_bunker_secret",
+                      display_name=_mft("Nostr bunker secret"),
+                      type=SettingsConstants.TYPE__FREE_ENTRY,
+                      visibility=SettingsConstants.VISIBILITY__HIDDEN,
+                      default_value=""),
 
 
         # Hardware config
