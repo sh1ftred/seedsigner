@@ -197,7 +197,7 @@ class MainMenuView(View):
 
     def run(self):
         from seedsigner.gui.screens.screen import MainMenuScreen
-        button_data = [self.SCAN, self.SEEDS, self.TOOLS, self.NOSTR, self.SETTINGS]
+        button_data = [self.SCAN, self.SEEDS, self.TOOLS, self.SETTINGS]
         selected_menu_num = self.run_screen(
             MainMenuScreen,
             title=_("Home"),
@@ -218,10 +218,6 @@ class MainMenuView(View):
         elif button_data[selected_menu_num] == self.TOOLS:
             from seedsigner.views.tools_views import ToolsMenuView
             return Destination(ToolsMenuView)
-
-        elif button_data[selected_menu_num] == self.NOSTR:
-            from seedsigner.views.nostr_views import NostrMenuView
-            return Destination(NostrMenuView)
 
         elif button_data[selected_menu_num] == self.SETTINGS:
             from seedsigner.views.settings_views import SettingsMenuView
