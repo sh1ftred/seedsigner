@@ -25,15 +25,23 @@ class NostrMenuView(View):
     SERVICE_STATUS = ButtonOption("Service status")
 
     def _ensure_bunker_keys(self):
+        from pathlib import Path
+
+        priv_path = Path("/tmp/nostr_bunker_private_key.hex")
+
         if not self.settings.get_value(SettingsConstants.SETTING__NOSTR_BUNKER_PUBKEY):
             kp = NostrSigner.generate()
             self.settings.set_value(SettingsConstants.SETTING__NOSTR_BUNKER_PUBKEY, kp.public_key_hex)
             self.settings.set_value(SettingsConstants.SETTING__NOSTR_BUNKER_SECRET, kp.secret)
-            # private key is intentionally not persisted in app settings for now
             self.controller.nostr_bunker_private_key_hex = kp.private_key_hex
+            priv_path.write_text(kp.private_key_hex)
         elif not getattr(self.controller, "nostr_bunker_private_key_hex", None):
-            kp = NostrSigner.generate()
-            self.controller.nostr_bunker_private_key_hex = kp.private_key_hex
+            if priv_path.exists():
+                self.controller.nostr_bunker_private_key_hex = priv_path.read_text().strip()
+            else:
+                kp = NostrSigner.generate()
+                self.controller.nostr_bunker_private_key_hex = kp.private_key_hex
+                priv_path.write_text(kp.private_key_hex)
 
     def run(self):
         self._ensure_bunker_keys()
@@ -242,11 +250,14 @@ class NostrServiceStatusView(View):
         secret = self.settings.get_value(SettingsConstants.SETTING__NOSTR_BUNKER_SECRET) or "missing"
         status = _("Enabled") if enabled else _("Disabled")
 
+        status_path = Path("/tmp/nostr_bunker_service_status.json")
+        runtime_status = status_path.read_text() if status_path.exists() else "no runtime status yet"
+
         self.run_screen(
             WarningScreen,
             title=_("Bunker Service"),
-            status_headline=_("Skeleton only"),
-            text=f"mode: {status}\nrelay: {relay}\napp pubkey: {app_pubkey}\nsecret: {secret}\n\nBackground service wiring is scaffolded but live relay processing is not complete yet.",
+            status_headline=_("Runtime status"),
+            text=f"mode: {status}\nrelay: {relay}\napp pubkey: {app_pubkey}\nsecret: {secret}\n\nruntime:\n{runtime_status}",
             button_data=[ButtonOption("Back")],
             show_back_button=False,
         )
@@ -267,7 +278,7 @@ class NostrConnectDetailsView(View):
             WarningScreen,
             title=_("Nostr Connect"),
             status_headline=_("Connection scanned"),
-            text=f"pubkey:\n{pubkey}\n\nrelay:\n{relay}\n\nsecret:\n{secret}",
+            text=f"pubkey:\n{pubkey}\n\nrelay:\n{relay}\n\nsecret:\n{secret}\n\nBunker service can now use this client connection info.",
             button_data=[ButtonOption("Back")],
             show_back_button=False,
         )

@@ -256,6 +256,12 @@ class ScanNostrConnectView(ScanView):
                 "secret": secret,
             }
 
+            try:
+                from pathlib import Path
+                Path("/tmp/nostr_connect.json").write_text(data and __import__("json").dumps(self.controller.nostr_connect_data, separators=(",", ":")))
+            except Exception:
+                pass
+
             return Destination(NostrConnectDetailsView)
 
         elif self.decoder.is_invalid:
