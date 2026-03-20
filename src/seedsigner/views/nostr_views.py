@@ -239,17 +239,34 @@ class NostrConnectDetailsView(View):
     def run(self):
         data = getattr(self.controller, "nostr_connect_data", None) or {}
         relay = data.get("relay") or self.settings.get_value(SettingsConstants.SETTING__NOSTR_RELAY_URL)
+        relays = data.get("relays") or ([relay] if relay else [])
         pubkey = data.get("pubkey", "")
         secret = data.get("secret", "")
+        name = data.get("name", "")
+        url = data.get("url", "")
+        perms = data.get("perms", "")
 
         if relay:
             self.settings.set_value(SettingsConstants.SETTING__NOSTR_RELAY_URL, relay)
+
+        relays_text = "\n".join(relays) if relays else relay
+        details = [
+            f"pubkey:\n{pubkey}",
+            f"relays:\n{relays_text}",
+            f"secret:\n{secret}",
+        ]
+        if name:
+            details.append(f"name:\n{name}")
+        if url:
+            details.append(f"url:\n{url}")
+        if perms:
+            details.append(f"perms:\n{perms}")
 
         self.run_screen(
             WarningScreen,
             title=_("Nostr Connect"),
             status_headline=_("Connection scanned"),
-            text=f"pubkey:\n{pubkey}\n\nrelay:\n{relay}\n\nsecret:\n{secret}\n\nBunker service can now use this client connection info.",
+            text="\n\n".join(details) + "\n\nBunker service can now use this client connection info.",
             button_data=[ButtonOption("Back")],
             show_back_button=False,
         )

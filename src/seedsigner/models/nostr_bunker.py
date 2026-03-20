@@ -91,7 +91,7 @@ class NostrSigner:
 
     @staticmethod
     def bunker_url(bunker_pubkey_hex: str, relay_url: str, secret: str) -> str:
-        return f"nostrconnect://{bunker_pubkey_hex}?relay={relay_url}&secret={secret}"
+        return f"bunker://{bunker_pubkey_hex}?relay={relay_url}&secret={secret}"
 
     @staticmethod
     def make_nip46_request(method: str, params: Any, request_id: Optional[str] = None) -> str:

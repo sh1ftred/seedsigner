@@ -220,7 +220,7 @@ class ScanNostrConnectView(ScanView):
         if self.decoder.is_invalid:
             return False
         data = self.decoder.get_qr_data()
-        return isinstance(data, str) and data.lower().startswith("nostrconnect://")
+        return isinstance(data, str) and data.strip().lower().startswith("nostrconnect://")
 
     def run(self):
         from seedsigner.gui.screens.scan_screens import ScanScreen
@@ -235,6 +235,13 @@ class ScanNostrConnectView(ScanView):
 
         if self.decoder.is_complete:
             data = self.decoder.get_qr_data()
+            if isinstance(data, bytes):
+                try:
+                    data = data.decode("utf-8")
+                except Exception:
+                    data = ""
+            if isinstance(data, str):
+                data = data.strip()
             if not isinstance(data, str) or not data.lower().startswith("nostrconnect://"):
                 return Destination(ErrorView, view_args=dict(
                     title="Error",
@@ -245,15 +252,20 @@ class ScanNostrConnectView(ScanView):
                 ))
 
             parsed = urlparse(data)
-            relay = parse_qs(parsed.query).get("relay", [""])[0]
-            secret = parse_qs(parsed.query).get("secret", [""])[0]
+            query = parse_qs(parsed.query)
+            relays = query.get("relay", [])
+            secret = query.get("secret", [""])[0]
             pubkey = parsed.netloc
 
             self.controller.nostr_connect_uri = data
             self.controller.nostr_connect_data = {
                 "pubkey": pubkey,
-                "relay": relay,
+                "relay": relays[0] if relays else "",
+                "relays": relays,
                 "secret": secret,
+                "name": query.get("name", [""])[0],
+                "url": query.get("url", [""])[0],
+                "perms": query.get("perms", [""])[0],
             }
 
             try:
