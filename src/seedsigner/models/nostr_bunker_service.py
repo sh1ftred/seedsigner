@@ -103,7 +103,7 @@ class NostrBunkerService:
             raise NostrBunkerError("missing client pubkey")
 
         try:
-            plaintext = NostrSigner.decrypt_nip04(self.private_key_hex, client_pubkey, content)
+            plaintext = NostrSigner.decrypt_nip44(self.private_key_hex, client_pubkey, content)
         except Exception:
             plaintext = content
 
@@ -162,7 +162,7 @@ class NostrBunkerService:
         if not self.signer:
             raise RuntimeError("missing bunker signer")
         content = self.build_response_content(request_id=request_id, result=result, error=error)
-        encrypted = NostrSigner.encrypt_nip04(self.private_key_hex, client_pubkey, content)
+        encrypted = NostrSigner.encrypt_nip44(self.private_key_hex, client_pubkey, content)
         event = self.signer.make_signed_nip46_event(client_pubkey_hex=client_pubkey, content=encrypted)
         await self.ws.send(json.dumps(["EVENT", event], separators=(",", ":")))
         self.write_status(self.build_status(
