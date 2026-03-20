@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from gettext import gettext as _
 
 from seedsigner.gui.screens import RET_CODE__BACK_BUTTON, ButtonListScreen
-from seedsigner.gui.screens.screen import ButtonOption, KeyboardScreen
+from seedsigner.gui.screens.screen import ButtonOption, KeyboardScreen, QRDisplayScreen
 from seedsigner.models.nostr_bunker import NostrSigner
 from seedsigner.models.settings_definition import SettingsConstants
 
@@ -122,41 +122,26 @@ class NostrRelayKeyboardScreen(KeyboardScreen):
 
 
 class NostrWiFiSSIDEntryView(View):
+    WIFI_OPTIONS = [
+        ("LIVING", "LIVINGBU"),
+        ("COWORK", "coworking"),
+    ]
+
     def run(self):
-        value = self.run_screen(
-            NostrWiFiSSIDKeyboardScreen,
-            title=_("WiFi SSID"),
-            rows=4,
-            cols=10,
-            keys_charset="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ._-",
-            show_save_button=True,
+        button_data = [ButtonOption(ssid) for ssid, _password in self.WIFI_OPTIONS]
+
+        selected_menu_num = self.run_screen(
+            ButtonListScreen,
+            title=_("Configure WiFi"),
+            is_button_text_centered=False,
+            button_data=button_data,
         )
 
-        if value == RET_CODE__BACK_BUTTON:
+        if selected_menu_num == RET_CODE__BACK_BUTTON:
             return Destination(NostrMenuView)
 
-        return Destination(NostrWiFiPasswordEntryView, view_args={"ssid": value})
-
-
-class NostrWiFiPasswordEntryView(View):
-    def __init__(self, ssid: str):
-        super().__init__()
-        self.ssid = ssid
-
-    def run(self):
-        value = self.run_screen(
-            NostrWiFiPasswordKeyboardScreen,
-            title=_("WiFi Password"),
-            rows=4,
-            cols=10,
-            keys_charset="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~",
-            show_save_button=True,
-        )
-
-        if value == RET_CODE__BACK_BUTTON:
-            return Destination(NostrWiFiSSIDEntryView)
-
-        return Destination(NostrWiFiConfirmView, view_args={"ssid": self.ssid, "password": value})
+        ssid, password = self.WIFI_OPTIONS[selected_menu_num]
+        return Destination(NostrWiFiConfirmView, view_args={"ssid": ssid, "password": password})
 
 
 class NostrWiFiConfirmView(View):
@@ -210,33 +195,19 @@ class NostrWiFiConfirmView(View):
         return Destination(NostrMenuView)
 
 
-@dataclass
-class NostrWiFiSSIDKeyboardScreen(KeyboardScreen):
-    pass
-
-
-@dataclass
-class NostrWiFiPasswordKeyboardScreen(KeyboardScreen):
-    pass
-
-
 class NostrConnectionView(View):
     def run(self):
+        from seedsigner.models.encode_qr import GenericStaticQrEncoder
+
         pubkey = self.settings.get_value(SettingsConstants.SETTING__NOSTR_BUNKER_PUBKEY)
         secret = self.settings.get_value(SettingsConstants.SETTING__NOSTR_BUNKER_SECRET)
         relay = self.settings.get_value(SettingsConstants.SETTING__NOSTR_RELAY_URL)
         url = NostrSigner.bunker_url(pubkey, relay, secret)
-        connect_uri = getattr(self.controller, "nostr_connect_uri", None)
 
-        extra = f"\n\nlast scanned:\n{connect_uri}" if connect_uri else ""
-
+        qr_encoder = GenericStaticQrEncoder(data=url)
         self.run_screen(
-            WarningScreen,
-            title=_("Nostr Connection"),
-            status_headline=_("Scan with client"),
-            text=f"pubkey:\n{pubkey}\n\nrelay:\n{relay}\n\nsecret:\n{secret}\n\nurl:\n{url}{extra}",
-            button_data=[ButtonOption("Back")],
-            show_back_button=False,
+            QRDisplayScreen,
+            qr_encoder=qr_encoder,
         )
         return Destination(NostrMenuView)
 
