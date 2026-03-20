@@ -8,7 +8,7 @@ import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
-from seedsigner.models.nostr_bunker import NIP46_KIND, NostrSigner
+from seedsigner.models.nostr_bunker import NIP46_KIND, NostrBunkerError, NostrSigner
 from seedsigner.models.settings import Settings
 from seedsigner.models.settings_definition import SettingsConstants
 
@@ -95,17 +95,29 @@ class NostrBunkerService:
         await self.ws.send(json.dumps(req, separators=(",", ":")))
         self.write_status(self.build_status(state="subscribed"))
 
-    def parse_request_event(self, event: dict) -> tuple[str, str, list]:
+    def decrypt_request(self, event: dict) -> tuple[str, str, str, list]:
+        client_pubkey = event.get("pubkey", "")
         content = event.get("content", "")
-        payload = json.loads(content)
+
+        if not client_pubkey:
+            raise NostrBunkerError("missing client pubkey")
+
+        try:
+            plaintext = NostrSigner.decrypt_nip04(self.private_key_hex, client_pubkey, content)
+        except Exception:
+            plaintext = content
+
+        payload = json.loads(plaintext)
         if not isinstance(payload, dict):
-            raise ValueError("request content must be a JSON object")
+            raise NostrBunkerError("request content must be a JSON object")
+
         request_id = payload.get("id", "")
         method = payload.get("method", "")
         params = payload.get("params", [])
         if not isinstance(params, list):
-            raise ValueError("params must be a list")
-        return request_id, method, params
+            raise NostrBunkerError("params must be a list")
+
+        return client_pubkey, request_id, method, params
 
     def build_response_content(self, request_id: str, result=None, error: str | None = None) -> str:
         payload = {"id": request_id}
@@ -150,7 +162,8 @@ class NostrBunkerService:
         if not self.signer:
             raise RuntimeError("missing bunker signer")
         content = self.build_response_content(request_id=request_id, result=result, error=error)
-        event = self.signer.make_signed_nip46_event(client_pubkey_hex=client_pubkey, content=content)
+        encrypted = NostrSigner.encrypt_nip04(self.private_key_hex, client_pubkey, content)
+        event = self.signer.make_signed_nip46_event(client_pubkey_hex=client_pubkey, content=encrypted)
         await self.ws.send(json.dumps(["EVENT", event], separators=(",", ":")))
         self.write_status(self.build_status(
             state="response-sent" if error is None else "response-error-sent",
@@ -166,7 +179,7 @@ class NostrBunkerService:
         request_id = ""
         method = ""
         try:
-            request_id, method, params = self.parse_request_event(event)
+            client_pubkey, request_id, method, params = self.decrypt_request(event)
             result = self.handle_request(method, params)
             await self.publish_response(client_pubkey=client_pubkey, request_id=request_id, method=method, result=result)
         except Exception as exc:
@@ -220,8 +233,7 @@ class NostrBunkerService:
     async def run_forever_async(self):
         while True:
             try:
-                self.run_once_task = self.run_once()
-                await self.run_once_task
+                await self.run_once()
             except Exception as exc:
                 self.write_status(self.build_status(state="error", last_error=str(exc)))
                 await asyncio.sleep(10)

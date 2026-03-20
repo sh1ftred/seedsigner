@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import secrets
@@ -7,6 +8,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from embit import ec
 
 
@@ -129,3 +131,45 @@ class NostrSigner:
             "pubkey": self.public_key_hex,
         }
         return self.sign_event(event)
+
+    @staticmethod
+    def _pkcs7_pad(data: bytes) -> bytes:
+        pad_len = 16 - (len(data) % 16)
+        return data + bytes([pad_len]) * pad_len
+
+    @staticmethod
+    def _pkcs7_unpad(data: bytes) -> bytes:
+        if not data:
+            raise NostrBunkerError("empty ciphertext")
+        pad_len = data[-1]
+        if pad_len < 1 or pad_len > 16:
+            raise NostrBunkerError("invalid padding")
+        if data[-pad_len:] != bytes([pad_len]) * pad_len:
+            raise NostrBunkerError("invalid padding bytes")
+        return data[:-pad_len]
+
+    @staticmethod
+    def _shared_secret(private_key_hex: str, peer_pubkey_hex: str) -> bytes:
+        return hashlib.sha256(bytes.fromhex(private_key_hex) + bytes.fromhex(peer_pubkey_hex)).digest()
+
+    @classmethod
+    def encrypt_nip04(cls, private_key_hex: str, peer_pubkey_hex: str, plaintext: str) -> str:
+        key = cls._shared_secret(private_key_hex, peer_pubkey_hex)
+        iv = secrets.token_bytes(16)
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+        encryptor = cipher.encryptor()
+        ciphertext = encryptor.update(cls._pkcs7_pad(plaintext.encode("utf-8"))) + encryptor.finalize()
+        return f"{base64.b64encode(ciphertext).decode()}?iv={base64.b64encode(iv).decode()}"
+
+    @classmethod
+    def decrypt_nip04(cls, private_key_hex: str, peer_pubkey_hex: str, payload: str) -> str:
+        if "?iv=" not in payload:
+            raise NostrBunkerError("missing iv")
+        ciphertext_b64, iv_b64 = payload.split("?iv=", 1)
+        key = cls._shared_secret(private_key_hex, peer_pubkey_hex)
+        iv = base64.b64decode(iv_b64)
+        ciphertext = base64.b64decode(ciphertext_b64)
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+        decryptor = cipher.decryptor()
+        plaintext = decryptor.update(ciphertext) + decryptor.finalize()
+        return cls._pkcs7_unpad(plaintext).decode("utf-8")
