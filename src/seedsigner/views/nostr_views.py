@@ -18,9 +18,11 @@ logger = logging.getLogger(__name__)
 class NostrMenuView(View):
     TOGGLE = ButtonOption("Enable / Disable bunker")
     WIFI = ButtonOption("Configure WiFi")
+    SCAN_CONNECT = ButtonOption("Scan Nostr Connect")
     SHOW_CONNECTION = ButtonOption("Show bunker connection")
     EDIT_RELAY = ButtonOption("Edit relay URL")
     TEST_EVENT = ButtonOption("Generate test event")
+    SERVICE_STATUS = ButtonOption("Service status")
 
     def _ensure_bunker_keys(self):
         if not self.settings.get_value(SettingsConstants.SETTING__NOSTR_BUNKER_PUBKEY):
@@ -42,10 +44,12 @@ class NostrMenuView(View):
         button_data = [
             ButtonOption(f"Bunker mode: {status}"),
             self.WIFI,
+            self.SCAN_CONNECT,
             ButtonOption(f"Relay: {relay}"),
             self.SHOW_CONNECTION,
             self.EDIT_RELAY,
             self.TEST_EVENT,
+            self.SERVICE_STATUS,
         ]
 
         selected_menu_num = self.run_screen(
@@ -66,6 +70,10 @@ class NostrMenuView(View):
         if button_data[selected_menu_num] == self.WIFI:
             return Destination(NostrWiFiSSIDEntryView)
 
+        if button_data[selected_menu_num] == self.SCAN_CONNECT:
+            from seedsigner.views.scan_views import ScanNostrConnectView
+            return Destination(ScanNostrConnectView)
+
         if button_data[selected_menu_num] == self.SHOW_CONNECTION:
             return Destination(NostrConnectionView)
 
@@ -74,6 +82,9 @@ class NostrMenuView(View):
 
         if button_data[selected_menu_num] == self.TEST_EVENT:
             return Destination(NostrTestEventView)
+
+        if button_data[selected_menu_num] == self.SERVICE_STATUS:
+            return Destination(NostrServiceStatusView)
 
         return Destination(BackStackView)
 
@@ -207,12 +218,56 @@ class NostrConnectionView(View):
         secret = self.settings.get_value(SettingsConstants.SETTING__NOSTR_BUNKER_SECRET)
         relay = self.settings.get_value(SettingsConstants.SETTING__NOSTR_RELAY_URL)
         url = NostrSigner.bunker_url(pubkey, relay, secret)
+        connect_uri = getattr(self.controller, "nostr_connect_uri", None)
+
+        extra = f"\n\nlast scanned:\n{connect_uri}" if connect_uri else ""
 
         self.run_screen(
             WarningScreen,
             title=_("Nostr Connection"),
             status_headline=_("Scan with client"),
-            text=f"pubkey:\n{pubkey}\n\nrelay:\n{relay}\n\nsecret:\n{secret}\n\nurl:\n{url}",
+            text=f"pubkey:\n{pubkey}\n\nrelay:\n{relay}\n\nsecret:\n{secret}\n\nurl:\n{url}{extra}",
+            button_data=[ButtonOption("Back")],
+            show_back_button=False,
+        )
+        return Destination(NostrMenuView)
+
+
+class NostrServiceStatusView(View):
+    def run(self):
+        enabled = self.settings.get_value(SettingsConstants.SETTING__NOSTR_BUNKER) == SettingsConstants.OPTION__ENABLED
+        connect_data = getattr(self.controller, "nostr_connect_data", None) or {}
+        relay = connect_data.get("relay") or self.settings.get_value(SettingsConstants.SETTING__NOSTR_RELAY_URL)
+        app_pubkey = connect_data.get("pubkey", "not scanned")
+        secret = self.settings.get_value(SettingsConstants.SETTING__NOSTR_BUNKER_SECRET) or "missing"
+        status = _("Enabled") if enabled else _("Disabled")
+
+        self.run_screen(
+            WarningScreen,
+            title=_("Bunker Service"),
+            status_headline=_("Skeleton only"),
+            text=f"mode: {status}\nrelay: {relay}\napp pubkey: {app_pubkey}\nsecret: {secret}\n\nBackground service wiring is scaffolded but live relay processing is not complete yet.",
+            button_data=[ButtonOption("Back")],
+            show_back_button=False,
+        )
+        return Destination(NostrMenuView)
+
+
+class NostrConnectDetailsView(View):
+    def run(self):
+        data = getattr(self.controller, "nostr_connect_data", None) or {}
+        relay = data.get("relay") or self.settings.get_value(SettingsConstants.SETTING__NOSTR_RELAY_URL)
+        pubkey = data.get("pubkey", "")
+        secret = data.get("secret", "")
+
+        if relay:
+            self.settings.set_value(SettingsConstants.SETTING__NOSTR_RELAY_URL, relay)
+
+        self.run_screen(
+            WarningScreen,
+            title=_("Nostr Connect"),
+            status_headline=_("Connection scanned"),
+            text=f"pubkey:\n{pubkey}\n\nrelay:\n{relay}\n\nsecret:\n{secret}",
             button_data=[ButtonOption("Back")],
             show_back_button=False,
         )

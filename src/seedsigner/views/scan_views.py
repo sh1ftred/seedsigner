@@ -1,5 +1,6 @@
 import logging
 import re
+from urllib.parse import parse_qs, urlparse
 
 from gettext import gettext as _
 from seedsigner.helpers.l10n import mark_for_translation as _mft
@@ -208,6 +209,59 @@ class ScanAddressView(ScanView):
     def is_valid_qr_type(self):
         return self.decoder.is_address
 
+
+
+class ScanNostrConnectView(ScanView):
+    instructions_text = _mft("Scan Nostr Connect")
+    invalid_qr_type_message = _mft("Expected a Nostr Connect QR")
+
+    @property
+    def is_valid_qr_type(self):
+        if self.decoder.is_invalid:
+            return False
+        data = self.decoder.get_qr_data()
+        return isinstance(data, str) and data.lower().startswith("nostrconnect://")
+
+    def run(self):
+        from seedsigner.gui.screens.scan_screens import ScanScreen
+        from seedsigner.views.nostr_views import NostrConnectDetailsView
+
+        self.run_screen(
+            ScanScreen,
+            instructions_text=self.instructions_text,
+            decoder=self.decoder
+        )
+        self.controller.reset_screensaver_timeout()
+
+        if self.decoder.is_complete:
+            data = self.decoder.get_qr_data()
+            if not isinstance(data, str) or not data.lower().startswith("nostrconnect://"):
+                return Destination(ErrorView, view_args=dict(
+                    title="Error",
+                    status_headline=_("Wrong QR Type"),
+                    text=_(self.invalid_qr_type_message),
+                    button_text="Back",
+                    next_destination=Destination(BackStackView, skip_current_view=True),
+                ))
+
+            parsed = urlparse(data)
+            relay = parse_qs(parsed.query).get("relay", [""])[0]
+            secret = parse_qs(parsed.query).get("secret", [""])[0]
+            pubkey = parsed.netloc
+
+            self.controller.nostr_connect_uri = data
+            self.controller.nostr_connect_data = {
+                "pubkey": pubkey,
+                "relay": relay,
+                "secret": secret,
+            }
+
+            return Destination(NostrConnectDetailsView)
+
+        elif self.decoder.is_invalid:
+            return Destination(ScanInvalidQRTypeView)
+
+        return Destination(MainMenuView)
 
 
 class ScanInvalidQRTypeView(View):
