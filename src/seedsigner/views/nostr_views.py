@@ -1,4 +1,6 @@
 import logging
+import subprocess
+from pathlib import Path
 
 from dataclasses import dataclass
 from gettext import gettext as _
@@ -15,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 class NostrMenuView(View):
     TOGGLE = ButtonOption("Enable / Disable bunker")
+    WIFI = ButtonOption("Configure WiFi")
     SHOW_CONNECTION = ButtonOption("Show bunker connection")
     EDIT_RELAY = ButtonOption("Edit relay URL")
     TEST_EVENT = ButtonOption("Generate test event")
@@ -38,6 +41,7 @@ class NostrMenuView(View):
 
         button_data = [
             ButtonOption(f"Bunker mode: {status}"),
+            self.WIFI,
             ButtonOption(f"Relay: {relay}"),
             self.SHOW_CONNECTION,
             self.EDIT_RELAY,
@@ -59,8 +63,8 @@ class NostrMenuView(View):
             self.settings.set_value(SettingsConstants.SETTING__NOSTR_BUNKER, new_value)
             return Destination(NostrMenuView, skip_current_view=True)
 
-        if selected_menu_num == 1:
-            return Destination(NostrConnectionView)
+        if button_data[selected_menu_num] == self.WIFI:
+            return Destination(NostrWiFiSSIDEntryView)
 
         if button_data[selected_menu_num] == self.SHOW_CONNECTION:
             return Destination(NostrConnectionView)
@@ -95,6 +99,105 @@ class NostrRelayEntryView(View):
 
 @dataclass
 class NostrRelayKeyboardScreen(KeyboardScreen):
+    pass
+
+
+class NostrWiFiSSIDEntryView(View):
+    def run(self):
+        value = self.run_screen(
+            NostrWiFiSSIDKeyboardScreen,
+            title=_("WiFi SSID"),
+            rows=4,
+            cols=10,
+            keys_charset="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ._-",
+            show_save_button=True,
+        )
+
+        if value == RET_CODE__BACK_BUTTON:
+            return Destination(NostrMenuView)
+
+        return Destination(NostrWiFiPasswordEntryView, view_args={"ssid": value})
+
+
+class NostrWiFiPasswordEntryView(View):
+    def __init__(self, ssid: str):
+        super().__init__()
+        self.ssid = ssid
+
+    def run(self):
+        value = self.run_screen(
+            NostrWiFiPasswordKeyboardScreen,
+            title=_("WiFi Password"),
+            rows=4,
+            cols=10,
+            keys_charset="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~",
+            show_save_button=True,
+        )
+
+        if value == RET_CODE__BACK_BUTTON:
+            return Destination(NostrWiFiSSIDEntryView)
+
+        return Destination(NostrWiFiConfirmView, view_args={"ssid": self.ssid, "password": value})
+
+
+class NostrWiFiConfirmView(View):
+    WPA_CONF_PATH = Path("/etc/wpa_supplicant.conf")
+
+    def __init__(self, ssid: str, password: str):
+        super().__init__()
+        self.ssid = ssid
+        self.password = password
+
+    @staticmethod
+    def _escape_wpa_value(value: str) -> str:
+        return value.replace('\\', '\\\\').replace('"', '\\"')
+
+    def _write_wpa_config(self):
+        ssid = self._escape_wpa_value(self.ssid)
+        password = self._escape_wpa_value(self.password)
+        content = (
+            "ctrl_interface=/var/run/wpa_supplicant\n"
+            "update_config=0\n"
+            "country=US\n"
+            "ap_scan=1\n\n"
+            "network={\n"
+            f'    ssid="{ssid}"\n'
+            f'    psk="{password}"\n'
+            "    key_mgmt=WPA-PSK\n"
+            "    scan_ssid=1\n"
+            "    priority=1\n"
+            "}\n"
+        )
+        self.WPA_CONF_PATH.write_text(content)
+
+    def _restart_network(self):
+        try:
+            subprocess.run(["/etc/init.d/S40network", "restart"], check=False, timeout=30)
+        except Exception as exc:
+            logger.exception(exc)
+
+    def run(self):
+        self._write_wpa_config()
+        self._restart_network()
+
+        self.run_screen(
+            WarningScreen,
+            title=_("WiFi Saved"),
+            status_headline=_("Network restart requested"),
+            text=f"SSID:\n{self.ssid}\n\nSaved to /etc/wpa_supplicant.conf\n\nIf connection does not come up, reboot and try again.",
+            button_data=[ButtonOption("Back")],
+            show_back_button=False,
+        )
+        return Destination(NostrMenuView)
+
+
+@dataclass
+class NostrWiFiSSIDKeyboardScreen(KeyboardScreen):
+    pass
+
+
+@dataclass
+class NostrWiFiPasswordKeyboardScreen(KeyboardScreen):
     pass
 
 
