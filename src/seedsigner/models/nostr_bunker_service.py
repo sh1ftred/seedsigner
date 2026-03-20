@@ -51,11 +51,21 @@ class NostrBunkerService:
             return PRIVATE_KEY_PATH.read_text().strip()
         return ""
 
+    def get_configured_relays(self) -> list[str]:
+        connect_data = self.connect_data or {}
+        relays = connect_data.get("relays") or []
+        if relays:
+            return [self.relay_to_websocket_url(relay) for relay in relays if relay]
+
+        relay = connect_data.get("relay") or self.settings.get_value(SettingsConstants.SETTING__NOSTR_RELAY_URL)
+        return [self.relay_to_websocket_url(relay)] if relay else []
+
     def build_status(self, state: str, last_error: str = "", last_request_id: str = "", last_method: str = "") -> BunkerServiceStatus:
         connect_data = self.connect_data or {}
+        relays = self.get_configured_relays()
         return BunkerServiceStatus(
             enabled=self.settings.get_value(SettingsConstants.SETTING__NOSTR_BUNKER) == SettingsConstants.OPTION__ENABLED,
-            relay=self.settings.get_value(SettingsConstants.SETTING__NOSTR_RELAY_URL),
+            relay=relays[0] if relays else self.settings.get_value(SettingsConstants.SETTING__NOSTR_RELAY_URL),
             state=state,
             app_pubkey=connect_data.get("pubkey", ""),
             last_error=last_error,
@@ -77,12 +87,22 @@ class NostrBunkerService:
     async def connect(self):
         import websockets
 
-        relay = self.settings.get_value(SettingsConstants.SETTING__NOSTR_RELAY_URL)
-        ws_url = self.relay_to_websocket_url(relay)
-        self.write_status(self.build_status(state=f"connect:{ws_url}"))
-        self.ws = await websockets.connect(ws_url, open_timeout=20, ping_interval=20, ping_timeout=20)
-        self.write_status(self.build_status(state=f"connected:{ws_url}"))
-        return ws_url
+        relays = self.get_configured_relays()
+        if not relays:
+            raise RuntimeError("no relay configured")
+
+        last_error = None
+        for ws_url in relays:
+            try:
+                self.write_status(self.build_status(state=f"connect:{ws_url}"))
+                self.ws = await websockets.connect(ws_url, open_timeout=20, ping_interval=20, ping_timeout=20)
+                self.write_status(self.build_status(state=f"connected:{ws_url}"))
+                return ws_url
+            except Exception as exc:
+                last_error = exc
+                self.write_status(self.build_status(state=f"connect-failed:{ws_url}", last_error=str(exc)))
+
+        raise RuntimeError(f"failed to connect to any relay: {last_error}")
 
     async def subscribe(self):
         pubkey = self.settings.get_value(SettingsConstants.SETTING__NOSTR_BUNKER_PUBKEY)
