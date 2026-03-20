@@ -733,7 +733,7 @@ class SettingsDefinition:
                       display_name=_mft("Nostr relay URL"),
                       type=SettingsConstants.TYPE__FREE_ENTRY,
                       visibility=SettingsConstants.VISIBILITY__HIDDEN,
-                      default_value="https://relay.redsh1ft.com"),
+                      default_value="wss://relay.redsh1ft.com"),
 
         SettingsEntry(category=SettingsConstants.CATEGORY__FEATURES,
                       attr_name=SettingsConstants.SETTING__NOSTR_BUNKER_PUBKEY,
